@@ -1,29 +1,44 @@
 const taskInput = document.getElementById('task-input');
+const taskTime = document.getElementById('task-time');
 const addBtn = document.getElementById('add-btn');
 const taskList = document.getElementById('task-list');
 
 let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
 
-// Load existing tasks
+// Load saved tasks
 window.onload = () => {
-  tasks.forEach(task => renderTask(task.text, task.done));
+  tasks.forEach(task => renderTask(task.text, task.done, task.time));
+  requestNotificationPermission();
+  checkReminders();
 };
 
 addBtn.addEventListener('click', () => {
   const text = taskInput.value.trim();
-  if (!text) return alert("Enter a task!");
-  tasks.push({ text, done: false });
+  const time = taskTime.value;
+
+  if (!text) return alert("Please enter a task!");
+  if (!time) return alert("Please select date and time!");
+
+  const task = { text, done: false, time, reminded: false };
+  tasks.push(task);
   localStorage.setItem('tasks', JSON.stringify(tasks));
-  renderTask(text, false);
+
+  renderTask(task.text, task.done, task.time);
   taskInput.value = "";
+  taskTime.value = "";
 });
 
-function renderTask(text, done) {
+function renderTask(text, done, time) {
   const li = document.createElement('li');
-  li.textContent = text;
   if (done) li.classList.add('done');
 
-  li.addEventListener('click', () => {
+  const header = document.createElement('div');
+  header.classList.add('task-header');
+
+  const span = document.createElement('span');
+  span.textContent = text;
+  span.classList.add('task-text');
+  span.addEventListener('click', () => {
     li.classList.toggle('done');
     updateStorage();
   });
@@ -37,17 +52,62 @@ function renderTask(text, done) {
     updateStorage();
   });
 
-  li.appendChild(del);
+  header.appendChild(span);
+  header.appendChild(del);
+
+  const timeEl = document.createElement('div');
+  timeEl.classList.add('task-time');
+  timeEl.textContent = "🕒 " + new Date(time).toLocaleString();
+
+  li.appendChild(header);
+  li.appendChild(timeEl);
+
   taskList.appendChild(li);
 }
 
 function updateStorage() {
   const updated = [];
   document.querySelectorAll('#task-list li').forEach(li => {
-    updated.push({
-      text: li.firstChild.textContent,
-      done: li.classList.contains('done')
-    });
+    const text = li.querySelector('.task-text').textContent;
+    const time = li.querySelector('.task-time').textContent.replace("🕒 ", "");
+    const done = li.classList.contains('done');
+    updated.push({ text, time, done });
   });
   localStorage.setItem('tasks', JSON.stringify(updated));
+}
+
+// Request notification permission
+function requestNotificationPermission() {
+  if ("Notification" in window && Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+}
+
+// Reminder check
+function checkReminders() {
+  setInterval(() => {
+    const now = new Date().getTime();
+    tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+
+    tasks.forEach((task, index) => {
+      const taskTime = new Date(task.time).getTime();
+      if (!task.reminded && taskTime - now <= 0 && !task.done) {
+        showNotification(task.text);
+        tasks[index].reminded = true;
+        localStorage.setItem('tasks', JSON.stringify(tasks));
+      }
+    });
+  }, 30000); // every 30 sec
+}
+
+// Show reminder notification
+function showNotification(task) {
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("⏰ Task Reminder", {
+      body: task,
+      icon: "https://cdn-icons-png.flaticon.com/512/3209/3209265.png"
+    });
+  } else {
+    alert(`⏰ Reminder: ${task}`);
+  }
 }
